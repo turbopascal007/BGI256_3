@@ -1,0 +1,56 @@
+
+BGI256   ASM   - definition source code 
+SBASE    INC   - system interface source code
+SHARD    INC   - hardware specific source code
+SPIXEL   INC   - pixel read/write source code
+SLINE    INC   - line drawing source code
+SBIT     INC   - fill read/write source code
+SBLT     INC   - screen write source code
+STEXT    INC   - bitmapped text source code
+SFLOOD   INC   - floodfill source code
+DEBFILE  INC   - debug specific source code
+INITDATA INC   - init data header source code
+SDATA    INC   - data variables source code
+SPAL     INC   - init palette data source code
+
+SVESA    INC   - VESA source code
+BGI256   OBJ   - version 3.00 obj file
+BGI256   BGI   - version 3.00 driver
+BGI256V2 BGI   - version 2.00 driver
+
+V7INIT   INC   - video 7 source code
+V7BGI256 OBJ   - version 3.00 obj file
+V7BGI256 BGI   - version 3.00 driver
+V7256V2  BGI   - version 2.00 driver
+
+TRIDENT  INC   - trident source code
+TRI256   OBJ   - version 3.00 obj file
+TRI256   BGI   - version 3.00 driver
+TRI256V2 BGI   - version 2.00 driver
+
+BDH3     PAS   - BGI header builder source
+BDH3     EXE   - BGI header builder program
+CREATE   BAT   - batch program to create bgi drivers
+COPYRITE DAT   - BGI copyright message
+
+DEMO256  PAS   - demo program source
+DEMO256  EXE   - demo program
+WRMODE   PAS   - constants used by BGI256
+FILLPR   PAS   - floodfill test program #1
+FLOODTST PAS   - floodfill test program #2
+FONTEST  PAS   - bitmapped text test program
+MAKEFONT PAS   - bitmap font file creation program
+FNTIMG   DAT   - sample user bitmap font file
+
+BGI256   DOC   - driver use documentation
+CREATE   DOC   - CREATE.BAT use documentation
+FLOOD    DOC   - floodfill documentation
+BITFONT  DOC   - bitmapped font documentation
+BUGS     DOC   - bug fixes
+LICENSE  DOC   - license info
+ORDER    DOC   - order form
+MANIFEST DOC   - this file
+
+BGI256   ZIP   - The above files in archive form
+BGI256   DES   - decription of archive
+

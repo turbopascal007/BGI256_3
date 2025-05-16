@@ -1,0 +1,67 @@
+22 December 1992 -med
+
+V2.04 Fixes from earlier versions:
+
+BitMapped text was being drawn one pixel down from the proper position.
+This was fixed in V2.04.
+
+
+V2.06 of BGI256 fixes the following problems from earlier versions:
+
+In VesaBank routine, the push/pop was out of sequence. This didn't 
+cause any problems, but was fixed anyway to be proper.
+
+ET4000 cards: The ET4000 uses seperate read and write windows in
+its super VGA modes. This caused screen reads to be incorrect.
+This version now updates both windows.
+
+Diamond Stealth: The Stealth card uses non-sequencial memory in 
+800x600x256. This caused garbage to be shown in that mode.
+This version manages the problem by obtaining the true scan line 
+length from the appropriate VESA description field. 
+
+
+Known remaining bugs: The FloodFill has a problem when dealing 
+with complex fills. I recommend using PolyFill on anything complex,
+or use your own floodfill. I haven't had the chance to sitdown and 
+take the couple days to figure out how the floodfill works again 
+So that I can try to fix it. (Yes I wrote it, but its been ages...). 
+
+
+New additions: You can now select the background color in Pixel 
+draw mode. This was done to allow the circles and arcs to have 
+controlable lines like rectangles. This is required because the 
+circles and arcs are drawn by the graph unit using PutPixel, so the
+BGI has no control over the lines as it does with rectangles.
+
+A seperate Trident driver include file writen by Erik Olbrys
+has been included in this package with the permission of Erik
+for those who want a specific driver for the Trident card.
+
+
+V3.00 release:
+
+Provides protected mode support for V7.0 of Borland Pascal. 
+
+Floodfill has finally been properly fixed. 
+Full fill write mode support for floodfills has been provided. 
+Floodfill supports both border fill and seed fill. 
+Floodfill supports both simplex fills and complexx fills. 
+
+Minor changes made in SetWriteMode commands. PutImage write 
+mode selections will not be supported in the future since they 
+didn't do anything anyway. PutImage Write mode is controlled 
+by the PutImage routine. PutImage background color is still 
+controlled by SetWriteMode, but the function is being moved
+to the new Misc Command selection group. The Get Current 
+graphics mode command was also moved to the Misc command 
+selection group. It is still currently supported as 
+function #25, but this will go away in the future.
+
+Several new functions were added to the SetWriteMode 
+function to support the floodfill command.
+
+
+
+<eof>
+

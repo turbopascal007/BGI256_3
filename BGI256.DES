@@ -1,0 +1,12 @@
+BGI256 is a VESA compatible 256 color BGI driver for Borland's Pascal and C 
+languages. A VESA compatible BIOS or TSR is required to use this driver 
+beyond 320x200x256. Full source code and documentation included. A non-VESA 
+BGI driver is also included for Video7 and Trident cards. V3.01 provides 
+support for protected mode operation. Corrects windowing problem on ET4000 
+and Stealth cards. Floodfill now works. V3.01 Corrects version 2.00 header. 
+Uploaded by author Michael Day.
+
+/EXIT
+VESA BGI PASCAL C COLOR V7 VIDEO SEVEN GRAPHICS TRIDENT DPMI
+BGI driver for VESA compatible graphics
+

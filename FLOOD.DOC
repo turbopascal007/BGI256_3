@@ -1,0 +1,409 @@
+                  BGI256 FloodFill Description
+                            12/26/92
+
+
+I won't be getting into the details of the floodfill algorithms 
+here. I will presume that if you wish to explore the inner depths 
+of floodfills that you already have the basic understanding. If 
+not, you can obtain it from any number of books and articles on 
+the subject. The intent of this document is to explain the 
+approach I took to floodfill in the BGI256 driver, the reasoning 
+behind it, and how to use it.
+
+
+Overview:
+
+There are two basic types of floodfills. A border bound 
+floodfill, and a seed bound floodfill. In the border bound 
+floodfill, all areas within a defined border are filled with a 
+prescribed color. In a seed bound floodfill only the area 
+bound within by the seed color is filled. To put it a bit more 
+simply, a border fill will overwrite all other colors inside the 
+border color. A seed fill defines as its border any color other 
+than the starting seed color.
+
+Floodfills always start from a predefined point referred to as 
+the "seed" point. The seed defines the area that will be filled 
+by declaring where it is to begin. The seed location is always 
+passed as the X/Y parameter in the FloodFill command. The color 
+value that is passed is the border color to which the fill will 
+be confined in a border fill. For seed fill operations, the color 
+information passed is ignored. 
+
+
+Types of Floodfills:
+
+If you look in the graphics books, you will usually see the 
+simple floodfill algorithm. It consists of a recursive routine 
+that looks at each of the pixel locations surrounding the filled 
+location. This is a very slow method and eats lots of stack space 
+because of the recursion. Because of the limitations, nobody 
+actually uses the basic flood fill algorithm. Other more advanced 
+methods are used. 
+
+There are a number of methods by which a floodfill can be 
+performed. Each has its own set of tradeoffs. They boil down to 
+two distinct classes of algorithms. Those that read the display 
+to determine if it was already filled (simplex fills), and those 
+that track the information separately (complex fills). 
+
+The complex floodfills are the most reliable and must be used 
+when doing a read/modify/write or a pattern type of fill. The 
+disadvantage is that they are slow and use lots of memory 
+resources. Complex fills are slow and hog memory because they 
+must track every place on the screen that was filled so that it 
+won't be filled again. This means that for each fill location on 
+the display it must check the location stack to see if it has 
+been there before. For large convoluted fills the stack can grow 
+to be quite large which can slow things down a lot and use lots 
+of memory.
+
+A simplex fill is a special case floodfill. It relies on a few 
+limitations to be able to perform quickly. The simplex fill 
+allows for much faster fills to happen by not bothering to track 
+if it has been someplace before. Instead it looks at the display 
+to see if it was there before. Since we have to look at the 
+display to decide whether to fill it or not, the information is 
+already there. 
+
+This eliminates the slow down of checking the stack, but requires 
+the limitation that the current floodfill drawing color not be 
+the seed color. This is because the fast floodfill uses the 
+drawing color as the indicator that it has been to the location 
+previously. If you think about it, you can see that this creates 
+a problem for floodfills which do a read/modify/write type of 
+fill such as XOR. What is written to the display is based on what 
+was there which means that it changes. A pattern fill has a 
+similar problem in that both the background and the foreground 
+colors are being filled so a simple single color test won't work, 
+and since most pattern fills use the background color, there is 
+the problem of dealing with attempting to draw the background 
+color on the background. Leading to the problem of once again not 
+knowing if you've been there before.
+
+To prevent these problems, a complex floodfill must use the 
+slower method that tracks the locations of the fill rather than 
+reading the screen at the time of the fill. 
+
+
+Complex Fill:
+
+There are two basic types of location storage. The pixel per bit 
+method, and the XY location storage method. The pixel per bit 
+method has the advantage of speed because it is a fixed array of 
+bits identifying each pixel on the screen. That means that it can 
+be directly accessed, making the method very quick. The downside 
+is that the entire storage area must be allocated in memory. This 
+is ok for small screen areas, but for large screens we run into a 
+memory problem. As an example, lets say we are filling a 1024x768 
+screen; That means that we would require 98304 bytes of storage 
+for the pixel information. That is over the 64K segment 
+limitation, which makes things rather difficult. 
+
+The other problem is that the BGI driver does not have direct 
+access to the system memory. It is provided memory only via the 
+stack, and the amount of stack it is given is predefined. The 
+default is 4000 bytes. Since the stack also must be used for 
+normal stack operations, including interrupts, you have to 
+subtract about 2000 bytes from the allocation to determine how 
+much stack is actually available for use inside the BGI. This 
+means that we only have about 2000 bytes of default stack to work 
+with. that comes out to about 24000 pixels. That seems like a lot 
+until you realize that it only covers an area of 240x100 pixels. 
+Even low-res CGA is larger than that. 
+
+The pixel per bit location identification is actually the 
+preferred method when the memory is available since it is fast 
+efficient and accurate. Unfortunately, in the PC environment it 
+runs into hardware limitations. 
+
+Given the limitations of the hardware and the driver, it is more 
+desirable to use a sparse array method. That is, storing the 
+locations of the fills rather than identifying the pixels. 
+Luckily, we don't have to store the location of each pixel 
+changed, we only need to store the scan line (Y), and the start 
+and stop location of the fill on the scan line (X1 and X2). 
+That is a big increase in memory usage, from 1/8th byte per pixel 
+to 6 bytes, but it makes use of the fact that fills seldom 
+consist of individual pixel fills. Most fills involve large areas 
+which means that actual memory usage is typically reduced. For a 
+fill line of 128 pixels we would use 16 bytes of memory for the 
+bit per pixel method, but only 6 bytes for the sparse array 
+method. In addition, typically the whole screen is not filled, so 
+we only use memory for those scan lines that are actually filled.  
+The down side is that we have to search the storage area on each 
+fill because it is no longer possible to code a fixed access 
+method. That means the search time is significantly slowed down, 
+especially when the filled area is convoluted requiring the 
+location stack to grow to a large size.
+
+
+Simplex fill -- It's the Speed Stupid!
+
+While accuracy is important of course, it doesn't do much good if 
+it takes over a minute to fill the screen. Users are simply not 
+going to accept that kind of performance. So what to do? 
+
+A simplex fill can often get the job done much faster and with 
+minimal memory usage. The simplex fill does apply some 
+restrictions. If you are going to do a read/modify/write type 
+fill such as XOR or a patterned fill, you cannot use the simplex 
+fill. In a normal fill, the fill mechanism determines if a fill 
+is to be done based on whether the pixel is the border color or 
+the seed color (depending on the type of fill being done). For 
+the simplex fill we add one more test which looks to see if the 
+pixel is the fill color. If it is the fill color, then we know 
+that we have been there before and it gets treated as if it were 
+the border or seed. That way we don't have to track the location 
+since we can tell that we have been there by looking at the pixel 
+color. 
+
+The limitation here is that we can't fill an area with the same 
+color. Since normally you would not do that, it is usually an 
+acceptable limitation. Most simplex fills concentrate on reducing 
+the number of repeat visits to a location to see if it needs to 
+be filled. Since each visit slows down the fill operation that 
+much longer, it is important to limit the repeats. This is 
+normally done by an ordered list pushed on a location stack. 
+
+The search method normally involves tracking the direction of the 
+search for areas to fill. There is no need to go back to an area 
+that was already filled, so by indicating the direction of the 
+search, that aspect can be eliminated. A popular method of 
+reducing the repeat visits is to break a fillable scan line into 
+three sections. Left, middle, and right. The left and right 
+sections are explored in both directions if they exceed the 
+length of the master scan line we came from. The middle section 
+is only explored in the direction we are moving since we know 
+where we've been. This reduces the re-visitation time by not 
+looking at the scan line we came from. Unfortunately, there is a 
+tremendous memory hit to do that. Instead of storing the 
+information for one scan line, we have to store it for three 
+sections. We've just eaten up three times the memory for a slight 
+increase in speed. In most cases it simply isn't worth it. Memory 
+is too precious. 
+
+In my simplex floodfill I store the entire scan line segment 
+instead of breaking it up. This means a slight decrease in speed, 
+but empirical experience has shown that in real life there is no 
+noticeable difference in speed but a significant difference in 
+memory savings. 
+
+An advantage of the simplex fill is that it uses an adjustable 
+stack. That is it only keeps the minimum information needed on 
+the stack for areas that it has yet to explore. A complex fill 
+must save everything it has done so that it can know where its 
+been. By discarding completed locations off the stack, the 
+simplex fill can reduce memory usage. 
+
+The simplex fill also has an advantage for situations where we 
+run out of memory. In a complex fill, when we run out of memory, 
+the fill must terminate at that point since it has no more memory 
+to be able to track locations. That usually leaves an incomplete 
+floodfill with ragged holes everyplace. With a simplex fill, 
+because of the ordered list, and because we can discard old 
+information from the stack, we can just stop exploring in the 
+direction we were moving, back up and try again in another 
+direction. This usually results in a cleaner fill failure. 
+Ragged holes are seldom left behind. Usually it is just one or 
+two large areas that are left unfilled. 
+
+
+Patterned Fills:
+
+Another problem with simplex fills is dealing with pattern fills 
+(fills with a foreground and background color mix). Since the 
+simplex fill looks only for the foreground color, a pattern fill 
+can drive it crazy since it will keep trying to fill in the 
+background that it put on the display. Because of this, patterned 
+fills are not allowed with a simplex floodfill. 
+
+
+Auto Flood Fill Detection:
+
+Because the simplex floodfill mechanism can't deal with anything 
+beyond the simple fill method of a solid unpatterned write only 
+foreground color, an auto-detection function exists which looks 
+at the floodfill configuration and determines if the floodfill 
+can occur as a simplex fill or requires a complex fill. If a 
+read/modify/write fill method is selected, or a patterned fill is 
+used, it will automatically select the complex fill operation. If 
+a single foreground color with solid write only fill is selected, 
+and the seed color is not equal to the fill color, the simplex 
+method will be used. You can force the complex fill method to be 
+used with the ComplexFill option using the SetWriteMode command 
+if you wish, but this will slow down the operation and reduce the 
+amount of usable stack. It is normally better to let the system 
+determine the best method.
+
+
+Delayed Filling:
+
+Because of the out-of-memory failure problem with complex fills, 
+I added a control flag which allows the filling to be delayed 
+until all information has been collected. If we run out of 
+memory, the flood fill does not happen. This allows an alternate 
+action to be taken before damaging the image with a partial fill. 
+The delayed fill is only available in the complex fill mode 
+because it requires the complex fill location stack to work. If 
+the simplex method is selected, the delayed fill flag will be 
+ignored. If the simplex fill is automatically selected, and you 
+wish to have a delayed fill, you must select the forced complex 
+fill method. 
+
+
+Flood Tracer:
+
+A problem with the delayed fill is that it can take time to 
+perform the initial search of the flood area. With nothing 
+happening on the screen it can look like the program locked up 
+and stopped working. To deal with this, I added a tracer function 
+which shows the location of the floodfill search as it traces the 
+floodfill area. The tracer works in simplex or complex mode, but 
+since the fill is directly noticeable in simplex mode, there is 
+no real need to have it on except when in complex fill mode and 
+the delayed fill function is turned on.
+
+
+Compressed stack:
+
+Even with the sparse array method used, the stack can still 
+easily run out of space in a convoluted fill pattern. If you run 
+out of stack space, you might want to turn on the stack 
+compression flag. This reduces stack usage by 33%, giving you 
+that much more stack memory. The trade off is that the fill speed 
+will be slowed down by about 50%. The reason for this is because 
+the stack compression discards the X2 location of the scan line 
+(doesn't save it). This provides the 33% reduction of the stack, 
+but it means that we must recreate the X2 location when we read 
+the location off the stack. To recreate it, we must read the 
+screen again to find the end of the scan line segment. That is 
+where the 50% slow down comes from. 
+
+The following floodfill options are available in the BGI256 
+driver. The options are selected via the SetWriteMode function.
+
+     BorderFill      (default)
+     SeedFill   
+     SimplexFill     (default)
+     ComplexFIll
+     FillCompressOff (default)
+     FillCompressOn
+     FillDelayOff    (default)
+     FillDelayOn
+     FillTraceOff    (default)
+     FillTraceOn
+
+
+You can select the desired option using the SetWriteMode command. 
+As an example, to select the Seed method, you would use the 
+following statement.
+
+ SetWriteMode(FloodFillType+SeedFill);
+
+
+Note: Do not mix commands in the same SetWriteMode function. Only 
+one command per function call is valid. As an example, the 
+following statement is _NOT_ valid.
+
+ SetWriteMode(FloodFillType+SeedFill+FillCompressOn+FillDelayOn);
+
+Instead, you must write it in three separate statements like the 
+following.
+
+ SetWriteMode(FloodFillType+SeedFill);
+ SetWriteMode(FloodFillType+FillCompressOn);
+ SetWriteMode(FloodFillType+FillDelayOn);
+
+
+You can read the current option settings by using the 
+GetFloodFillOpt command. When you select the command, the current 
+floodfill option flags will be returned in the next GetMaxMode 
+call. 
+
+ SetWriteMode(FloodFillType+GetFloodFillOpt); 
+ FFOptFlags := GetMaxMode;"
+
+
+The format of the option flag byte is as follows:
+
+ bit        description
+  0: 0=borderfill    1=seedfill
+  1: <reserved>
+  2: 0=auto fill     1=force complex fill
+  3: 0=compress off  1=compress on
+  4: 0=delay off     1=delay on
+  5: 0=tracer off    1=tracer on
+  6: <reserved>
+  7: 0=simplex fill  1=complex fill
+
+
+
+Other Misc Functions:
+
+When working on your own floodfills, you may find it desirable to 
+know just how much stack space is used up. Several functions have 
+been provided to obtain that information. Using the SetWriteMode 
+Misc Function command, you can ask for the peak stack usage and 
+the stack free space left from the previously run fill command. 
+
+
+The following code will tell you how much free space was 
+available on the fill stack at the end of the last fill command, 
+and how much was used. The total space available is the two 
+values added together. To determine the number of scan segments 
+that were used, dive the Stack Peak value by four if stack 
+compression was used, or by six if stack compression was not 
+used. 
+
+  SetWriteMode(MiscCommand+ReturnXYStackPeak);
+  XYStackPeak := GetMaxMode;
+  SetWriteMode(MiscCommand+ReturnXYStackFree);
+  XYStackFree := GetMaxMode;
+
+
+Reminders:
+
+One thing to watch out for is to remember that the flood fill is 
+based on the color information (border or seed). What may seem to 
+be two equal colors on the display may in fact be two different 
+colors. As an example, the default startup white color (255) 
+looks the same as the graph unit white color (15). In fact, they 
+are the same color, but the color _number_ is different. Thus if 
+you draw a picture using a border color of 255 then tell the 
+floodfill to fill it using the white 15 color, you will not get 
+the results you expected. You must remember to use the proper 
+border or seed color for the action you want.
+
+Also keep in mind that the floodfill is a memory hog. It needs 
+lots of memory. Even a simple large circle or square on the 
+screen will require more stack space than provided by the default 
+memory allocation given to the BGI if the complex fill method is 
+used. If you expect to be filling large and/or complex areas, you 
+should allocate more memory with the SetGraphBufSize function. 
+Note that you must allocate the buffer size before calling 
+InitGraph. Once InitGraph has been called, calls to 
+SetGraphBufSize will be ignored. 
+
+If you expect to be filling user created images, you should set 
+the buffer size as large as possible since it is not possible to 
+know ahead of time how much memory will be required for the fill. 
+You may also want to turn on the stack compression. There will be 
+some slow down of the fill, but not by an overly noticeable 
+amount, especially when a slow complex fill is being done. The 
+33% improvement in memory usage can make it worthwhile. 
+
+In most cases, it is recommended to let the floodfill function 
+select the most optimum fill method (simplex or complex) by using 
+the AutoFill command (default). 
+
+The only error returned by the floodfill command is running out 
+of stack memory. Attempting to fill a border or filling a simplex 
+seed color is not considered an error condition. If you need to 
+detect this situation, look at the stack free space. If the value 
+returned is zero, then the flood fill was terminated because an 
+attempt was made to fill a border color or the seed color matched 
+the fill color for a simplex fill. 
+
+<eof>
+ 

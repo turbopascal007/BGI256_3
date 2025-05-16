@@ -1,0 +1,1343 @@
+
+
+
+
+
+
+
+                                  BGI256 driver
+                         Copyright 1991,1992 Knight Software
+                                as of 26 Dec 1992
+
+
+        The BGI256 driver is a BGI driver for Super VGA cards using 
+        256 colors. The most popular 256 color modes are supported.
+        With this release of the driver, protected mode operation is now 
+        supported.
+
+        Mode     Description   Memory    Who uses it
+         0       320x200x256 : (64K)     Standard VGA and MCGA
+         1       640x400x256 : (256K)    Some Super VGAs
+         2       640x480x256 : (512K)    Most Super VGAs
+         3       800x600x256 : (512K/1M) Some Super VGAs
+         4      1024x768x256 : (1M)      Some Super VGAs
+         5     2048x1024x256 : (2M)      Some Super VGAs
+
+
+        The BGI256 driver supports most of the Graphics commands with a 
+        few exceptions. Additionally, I have added some extensions to the 
+        capabilities of the BGI driver beyond the functionality of the 
+        standard BGI drivers. These extensions do not affect the normal 
+        use of the BGI driver with regular programs. The extensions allow 
+        for greater flexibility in the use of the driver and various 
+        drawing functions. 
+
+        The driver works with the standard Borland graphics commands. For 
+        the operation of the graphics commands refer to your Pascal or C 
+        language reference manual. 
+
+        It should be noted that the BGI driver was originally designed 
+        for use with the Hercules, CGA and EGA displays. It does not have 
+        full support capability for VGA type displays, and in fact has 
+        some limitations placed on it by the EGA specific code. Every 
+        attempt was made to keep the operation as similar as possible to 
+        the Borland supplied BGI drivers, but because of the limitations 
+        imposed by Borland's GRAPH code some functions do not work 
+        exactly the same, or do not work at all. 
+
+        The following list of commands describe the exceptions or 
+        limitations of the graphics commands that are not fully 
+        supported, supported differently, or have been extended in this 
+        driver. Graphics functions that are not listed here continue to 
+        operate exactly as specified in the language reference manual. 
+
+
+
+
+
+
+
+
+                                        1
+
+
+
+        Pascal: function AutoDetect : integer;
+        C, C++: int huge autodetect(void);
+
+        The AutoDetect function is not a library function but rather code 
+        that you must write yourself if you are going to be using 
+        autodetection for a non-Borland supplied BGI driver. You can 
+        label the function any name that you wish as long as you pass a 
+        pointer to the function to the InstallUserDriver when it is 
+        called. If you are not going to be supplying an autodetect 
+        function, then you should pass a nil pointer to the 
+        InstallUserDriver function. 
+
+        Note: In TP5.0 and TP5.5 you must use the Autodetection method 
+        due to a bug in the graph unit which causes the InstallUserDriver 
+        function to return a bad number.
+
+        The AutoDetect function can be used to determine if the hardware 
+        is installed in the computer, and the Borland manuals indicate 
+        that this is it's function. I consider this poor practice however 
+        since it places hardware dependent code in the main program which 
+        defeats the purpose of the BGI driver which is to remove hardware 
+        dependencies from the main program code. The BGI256 driver 
+        provides the hardware detection as a part of the driver itself. 
+        The detection is performed during the InitGraph (and as a side 
+        effect in the SetGraphMode function). 
+
+        Normally you would pass the mode selection that you wish the 
+        display to start up in. Sometimes that is not always possible, 
+        especially with the Super VGA displays where you cannot be 
+        certain what modes are available until the display has been 
+        initialized with the InitGraph function. 
+
+        To solve that problem, if a mode value that is outside the range 
+        of available modes is passed to the driver it will go into 
+        auto-mode detection. This will cause the driver to ignore the 
+        mode value and place the driver into the default mode. This 
+        prevents setting the display to a non-supported mode while still 
+        allowing the main program to be non-hardware specific. 
+
+        The only problem with this is that the GRAPH unit will think that 
+        the mode selected is 127. To get around this limitation, an 
+        extended function has been provided to cause the GetMaxMode 
+        function to return the currently selected mode by calling 
+        SetWriteMode($E0+25) before calling GetMaxMode. The GetGraphMode 
+        function will not contain a proper value until a SetGraphMode 
+        call is made with a supported mode passed as the mode value.
+        Because of this, it is recommended that the GetMaxMode method be 
+        used if you use the auto-mode detection scheme. 
+
+        The same effect will occur if you pass the auto-mode value as a 
+        mode value to the InitGraph function along with the desired 
+        Driver number, or if the driver is unable to select the mode that 
+        is passed. In all cases the grInvalidMode error will be returned.
+
+
+
+
+                                        2
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure DetectGraph
+                                (var GraphDriver, GraphMode : integer);
+        C, C++: void far detectgraph
+                            (int far *graphdriver, int far *graphmode);
+
+        The DetectGraph function is used to detect the presence of one of 
+        the standard Borland supported display cards. This function will 
+        NOT call the AutoDetect function addressed by the 
+        InstallUserDriver function. If you wish to detect the presence of 
+        a non-Borland supplied driver, then you must first call the 
+        appropriate AutoDetect routine yourself.
+
+        This function doesn't normally have to be used unless you wish to 
+        override the driver/mode numbers normally determined by the 
+        detection function and you intend to use one of the Borland 
+        supplied BGI drivers.
+
+        The DetectGraph function is automatically called by the InitGraph 
+        function when the GraphDriver number passed is zero. If you call 
+        DetectGraph yourself, the number provided in GraphDriver is 
+        ignored, and the number for the Borland supplied driver that fits 
+        the determined display card is passed back in GraphDriver 
+        variable. The Mode number is set to the maximum mode number that 
+        is available for the detected display system. These numbers can 
+        then be used with the InitGraph function to actually initialize 
+        the graphics system. 
+
+        If you wish to autodetect the BGI256 driver, then you must call 
+        your own AutoDetect routine to test for the driver before 
+        attempting to call the DetectGraph function. If you don't do 
+        this, then this driver will not be detected.
+
+        See also:
+          AutoDetect, InitGraph, RegisterBGIdriver, InstallUserDriver
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        3
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure FloodFill(X, Y : integer; Border : word);
+        C, C++: void far floodfill(int x, int y, int border);
+
+        The Floodfill function is now fully supported in V3.00. You can 
+        select either Border Fill (default), or Seed Fill operation. The 
+        FillPattern controls the floodfill color and pattern that will be 
+        used (see SetFillPattern).  Note that for Seed based fills, the 
+        border color passed is ignored.
+
+        All of the extended write modes are supported by the Floodfill 
+        function through the use of the FillMode extension of the 
+        SetWriteMode command. In addition, a seperate WriteMode command 
+        has been provided to control specific floodfill options. 
+
+          BorderFill ------- 0  = border fill method (default)
+          SeedFill --------- 1  = seed fill method
+          AutoFill --------- 8  = auto fill mode detection (default)
+          ComplexFill ------ 9  = force complex fill mode
+          FillCompressOff -- 10 = fast fill stack operation (default)
+          FillCompressOn --- 11 = compressed fill stack operation
+          FillDelayOff ----- 12 = draw fill lines during search (default)
+          FillDelayOn ------ 13 = wait until search is done to do fill
+          FillTracerOff ---- 14 = don't show tracer cursor (default)
+          FillTracerOn ----- 15 = show tracer cursor during search
+
+        The default floodfill method is a border fill which is what 
+        Borland does in their own BGI drivers. Borland uses a simplex 
+        type of floodfill. The simplex fill is fast and uses minimum 
+        stack space, but it has a problem with complex fill modes (ie it 
+        doesn't always work). The floodfill routine provided with BGI256 
+        uses a simplex fill if the conditions allow it, but will switch 
+        to a complex fill if required to properly perform the fill. If 
+        you wish, you can force a complex type fill to always be used 
+        (it's slower and uses more stack space).
+
+        To help alleviate the problem of running out of stack space, a 
+        stack compression option has been provided which reduces stack 
+        usage by 33% with a tradeoff of 50% reduction in fill speed.
+
+        The FillDelay option allows the actual drawing of the fill lines 
+        to be delayed until after the complete search is done and all 
+        fill lines are known (this avoids incomplete fills because of out 
+        of memory problems). This option is only available in the Complex 
+        fill mode. It is ignored in the simplex fill mode. Since the 
+        fill search can take a lengthy period of time on complex fills, 
+        the FillTracer option is provided to show the search activity 
+        when using the delayed fill option (no it's not dead, just busy).
+
+        For more information of the operation of the floodfill function, 
+        see the FLOOD.DOC file which contains a full description of the 
+        operation of the floodfill function.
+
+
+
+
+                                        4
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: function GetBkColor:word;
+        C, C++: int far getbkcolor(void);
+
+        GetBkColor is an EGA type function. GetBkColor reads the current 
+        EGA type background color. See SetBkColor above for details. This 
+        is the last value that was set with the SetBkColor function. It 
+        is recommended that the SetBkColor and GetBkColor functions not 
+        be used. The function is mainly here for compatibility.
+
+        See also:
+          SetBkColor, SetColor, GetColor, SetRGBPalette, GetMaxColor
+
+        -----------------------------------------------------------------
+
+        Pascal: function GetColor:word;
+        C, C++: int far getcolor(void);
+
+        GetColor is the opposite of the SetColor function it returns the 
+        current drawing color that was set with the SetColor command.
+
+        Note that it is not possible to read the current background color 
+        with this function. If you wish to keep track of the current 
+        background color, you should use a variable inside your 
+        application program to track it. 
+
+        See also:
+          SetColor, SetWriteMode, GetMaxColor, GetBkColor
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure GetDefaultPalette(var Palette : PaletteType);
+        C, C++: struct palettetype *far getdefaultpalette(void);
+
+        This is an EGA type function. It will return the standard EGA 
+        default palette values for use with the SetAllPalette function. 
+        It is recommended that you do not use this function. The VGA 
+        palette will be loaded with a default palette whenever the 
+        InitGraph or SetGraphMode functions are called. You can obtain 
+        the default palette values by using the GetRGBPalette method 
+        described in the SetRGBPalette function description immediately 
+        after calling InitGraph or SetGraphMode. The function is mainly 
+        here for compatibility.
+
+        See also:
+          GetPalette, GetPalette, SetAllPalette, SetRGBpalette
+
+
+
+
+
+
+
+
+
+
+                                        5
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: function GetDriverName : string;
+        C, C++: char *far getdrivername(void);
+
+        The GetDriverName returns the name of the currently loaded 
+        driver. Currently this function only works with Borland's C 
+        compilers. The Pascal GRAPH unit does not properly support this 
+        function and will return an empty string. To determine the driver 
+        name, use the GetModeName function which will return the driver 
+        name as a part of it's return string.
+
+        See also:
+          DetectGraph, InitGraph, GetModeName
+
+        -----------------------------------------------------------------
+
+        Pascal: function GetGraphMode : integer;
+        C, C++: int far getgraphmode(void);
+
+        The GetGraphMode function returns the currently selected display 
+        mode. Note that this does not call the BGI driver, thus it cannot 
+        know if the BGI driver is not in the mode that was declared in 
+        InitGraph or SetGraphMode. You can use the GetMaxMode function 
+        preceeded by SetWriteMode($E0+25) to obtain the currently 
+        selected display mode inside the BGI driver. Refer to the mode 
+        listing for the various mode numbers available. 
+
+        See also:
+          GetMaxMode, SetGraphMode, GetGraphMode
+
+        -----------------------------------------------------------------
+
+        Pascal: function GetMaxColor : word;
+        C, C++: int far getmaxcolor(void);
+
+        This function returns the maximum color palette that can be used.
+        It works exactly like the normal GetMaxColor function except that 
+        the maximum color value of 255 will be returned instead of 15. 
+
+        See also:
+          SetColor, GetColor, SetWriteMode, GetBkColor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        6
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: function GetMaxMode : integer;
+        C, C++: int far getmaxmode(void);
+
+        The GetMaxMode function will return the maximum mode number that 
+        is allowed for the card that was detected. This is typically the 
+        number that was passed to the InitGraph function if a non-zero 
+        driver number was given, or the value returned by the AutoDetect 
+        function if the driver number was set to zero (Detect). Refer to 
+        the mode listing for the various mode numbers available.
+
+        The GetMaxMode function is also used as an mechanism to retrieve 
+        operation information from inside the BGI driver. The 
+        SetWriteMode($E0+command) function is used to select which value 
+        is to be returned by the GetMaxMode function for the extended 
+        functions. See the SetWriteMode function for more information.
+
+        If the auto-mode detection scheme was used (passing a Mode value 
+        of 127 to the InitGraph function), then GetMaxMode can be used to 
+        find out the true currently selected mode since the GetGraphMode 
+        function will not return the correct value. To have GetMaxMode 
+        return the current mode value, preceed the call to GetMaxMode 
+        with a call to SetWriteMode($E0+25). 
+
+        See also:
+          SetGraphMode, GetGraphMode, GetModeName, SetWriteMode
+
+        ---------------------------------------------------------------
+
+        Pascal: function GetModeName(GraphMode : integer) : string;
+        C, C++: char *far getmodename(int mode_number);
+
+        The GetModeName function will return a string containing the mode 
+        and driver name for the requested mode number. An error message 
+        is passed back in the string if the mode requested is not 
+        available. The GraphResult value will also be set to 
+        grInvalidMode. 
+
+        See also:
+          GetMaxMode, SetGraphMode, GetGraphMode, GetDriverName
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                        7
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: procedure GetModeRange
+                 (GraphDriver : integer; var LoMode, HiMode : integer);
+        C, C++: void far getmoderange
+                 (int graphdriver, int far *lomode, int far *himode);
+
+        GetModeRange does not work with this driver. This function only 
+        works with Borland's predefined BGI drivers. Incorrect results 
+        will be returned if you use this function. This is a limitation 
+        of the GRAPH code, not the BGI driver. You should use the 
+        GetMaxMode function instead. 
+
+        See also:
+          GetMaxMode, SetGraphMode, GetGraphMode, GetModeName
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure GetPalette(var Palette : PaletteType);
+        C, C++: void far getpalette(struc palettetype far *palette);
+
+        This is an EGA type function. You can only get the first sixteen 
+        palette entry values that were previously set with the SetPalette 
+        or SetAllPalette functions. It is recommended that you do not use 
+        this function. If you need to keep track of the palette values 
+        you should keep a copy of the palette inside your application 
+        program. There is no way to directly read the palette settings 
+        using the BGI libraries. See the SetRGBPalette function for a 
+        work-around to this limitation. The function is mainly here for 
+        compatibility. 
+
+        See also:
+          GetDefaultPalette, GetPalette, SetAllPalette, SetRGBpalette
+          
+        -----------------------------------------------------------------
+        Pascal: function GetPaletteSize : integer;
+        C, C++: int far getpalettesize(void);
+
+        This is an EGA type function. This function is limited by the 
+        GRAPH code and will always return a value of 15 which isn't much 
+        value in a 256 color driver.  It is recommended that you do not 
+        use this function. The function is mainly here for compatibility.
+
+        See also: 
+          GetDefaultPalette, GetPalette, SetAllPalette, SetRGBpalette
+
+
+
+
+
+
+
+
+
+
+
+
+                                        8
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: procedure InitGraph(var GraphDriver : integer;
+                       var GraphMode : integer; PathToDriver : String);
+        C, C++: void far initgraph(int far *graphdriver, 
+                           int far *graphmode, char far *pathtodriver);
+
+        InitGraph is used to initialize the graphics driver and switch 
+        the screen to graphics mode. If the GraphDriver value passed is 
+        zero, then the InitGraph routine will attempt to determine the 
+        highest display card/driver combination available. 
+
+        If you are using a non-Borland BGI and you have provided an 
+        AutoDetect function (by previously calling the InstallUserDriver 
+        function), the InitGraph function will first call the AutoDetect 
+        function to see if the card exists. If the card is not found, 
+        then the standard Borland BGI driver detection (DetectGraph 
+        function) will be performed. If a Borland supported driver/card 
+        combination is found, then the driver and mode numbers for that 
+        combination will be returned.
+
+        If the GraphNumber provided is a positive number, then it is 
+        assumed to be a valid driver number and that driver will be used. 
+        For a non-Borland supplied driver the number used should be the 
+        one returned by the InstallUserDriver function. 
+
+        If a GraphNumber is provided to the InitGraph function, the 
+        display will be set to the mode specified in the GraphMode 
+        variable. If the InitGraph function is told to autodetect the 
+        driver/card, then the mode number will be set based on the mode 
+        number returned by the autodetect routine and any number passed 
+        in the GraphMode variable is ignored. 
+
+        To override the default GraphMode number but still be able to 
+        autodetect, call any AutoDetect functions in your code yourself 
+        followed by the DetectGraph function if the AutoDetect function 
+        fails to determine the driver/card combination. Next call the 
+        InitGraph function with the driver and mode numbers returned from 
+        the detection code. 
+
+        If you pass a GraphMode number other than the one returned by the 
+        autodetection function, then that will become the selected mode 
+        that will be used until you call SetGraphMode or the CloseGraph 
+        function and recall the InitGraph with a different number.
+
+        Note that the Mode number that is passed to the InitGraph 
+        function is assumed to be a valid mode number that the display 
+        can handle. If the driver cannot support the mode, then it may 
+        select a different mode, and/or pass back a mode error. At this 
+        point, the value returned by GetGraphMode will be wrong. See the 
+        AutoDetect function for more information about this action.
+
+        See also:
+          AutoDetect, DetectGraph, RegisterBGIdriver, InstallUserDriver
+
+
+
+                                        9
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: function InstallUserDriver
+          (DriverFileName : string; AutoDetectPtr : pointer) : integer;
+        C, C++: int far installuserdriver
+                              (char far *name, int huge(*detect)(void);
+
+        The InstallUserDriver function tells the program that you are 
+        installing a non-Borland BGI driver. This function must be called 
+        before calling the InitGraph routine. If you are using the 
+        RegisterBGIdriver function, you must use the InstallUserDriver 
+        function before calling the RegisterBGIdriver function. 
+
+        The AutoDetectPtr is Pascal FAR procedure or C huge pointer that 
+        points to a procedure that is used to detect the presence of the 
+        display card being used with the driver. If the display card is 
+        found, then the function should return the desired mode number 
+        for the card. If the card is not found it should return a -2 
+        indicating that the card was not found. 
+
+        Note: In TP5.0 and TP5.5 the InstallUserDriver function does not 
+        return a valid driver number that can be used by the InitGraph 
+        function. Therefore you must use the AutoDetect mechanism with 
+        the InitGraph function to be able to use a non-Borland supplied 
+        BGI driver.
+
+        The Mode number that is returned from the function is assumed to 
+        be the desired mode number for the display. If you wish to use 
+        the display at a mode number that is not the value returned, then 
+        you should call the SetGraphMode function after the InitGraph 
+        function call to set the desired display mode.
+
+        The AutoDetectPtr value can alternately be set to a 'nil' value 
+        if you do not wish to provide an autodetect function for the 
+        card. If you do not provide an autodetect function, then you MUST 
+        provide the driver number returned by InstallUserDriver to the 
+        InitGraph function as the driver number to use if you want the 
+        user supplied driver to be used. (With TP5.0 and TP5.5 you must 
+        provide a valid pointer, the 'nil' mechanism will not work.)
+
+        If you tell the InitGraph function to autodetect (GraphDriver=0) 
+        without an autodetect function available, the InitGraph routine 
+        will only call the standard GraphDetect function to search for 
+        the standard Borland display/card combinations.
+             
+        See also:
+          DetectGraph, InitGraph, RegisterBGIdriver 
+
+
+
+
+
+
+
+
+
+
+                                       10
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure PutImage
+                          (X, Y : integer; var BitMap; BitBlt : word);
+        C, C++: void far putimage
+                          (int left, int top, void far *bitmap, int op);
+
+        PutImage works as before, with the exception that the copying 
+        methods have been expanded to allow 24 different copying methods. 
+        For more information on the copying methods available, refer to 
+        the SetWriteMode function.
+
+        See also:
+           ImageSize, GetImage, SetWriteMode
+
+        ---------------------------------------------------------------
+
+        Pascal: function RegisterBGIdriver(Driver : pointer) : integer;
+        C, C++: int registerbgidriver(void (*driver)(void));
+
+        The RegisterBGIdriver function allows you to link the BGI driver 
+        directly into the program. Either loaded on the heap, or as a 
+        linked in code module. You do not need to normally call this 
+        function unless you want to provide the BGI driver as a part of 
+        your program. Normally the InitGraph procedure will read the BGI 
+        driver from the disk and install it on the heap unless you 
+        override it with the RegisterBGIdriver function. 
+
+        To over-ride the InitGraph function, load the BGI driver into 
+        your program. Either as a part of the compile process via the 
+        Link directive, or by loading the BGI driver yourself directly 
+        into memory. Then use the RegisterBGIdriver to provide the 
+        InitGraph routine with a pointer to the start of the BGI driver 
+        image. 
+
+        See also:
+          DetectGraph, InitGraph, InstallUserDriver
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetActivePage(Page : word);
+        C, C++: void far setactivepage(int page);
+
+        The SetActivePage does nothing. You only get one display page to 
+        work with. If you want more you are welcome to add it to the BGI 
+        code.
+
+
+
+
+
+
+
+
+
+
+
+                                       11
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetAllPalette(var Palette);
+        C, C++: void far setallpalette(struct palettetype far *palette);
+
+        This is an EGA type function. You can only set the first 16 
+        palette entries with this function. It is recommended that you 
+        do not use this function. Use the SetRBGpalette function instead. 
+        The function is mainly here for compatibility.
+
+        See also: 
+          GetDefaultPalette, GetPalette, SetPalette, SetRGBpalette
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetBkColor(ColorNum:word); 
+        C, C++: void far setbkcolor(int color);
+
+        SetBkColor is an EGA type function. SetBkColor sets the color for 
+        palette zero. It is limited to copying the color from the palette 
+        number passed in the function. You are not passing a true color 
+        value, rather you are passing a reference to the palette number 
+        you wish to copy the color from. The background color will become 
+        the same color as that used by the palette number that you 
+        referenced.  
+
+        Since this is an EGA only function, it is limited to access of 
+        the first 16 palette entries. It is recommended that you use the 
+        SetRGBPalette function to set the background color for palette 
+        zero. Palette zero is the default background palette.
+        The function is mainly here for compatibility.
+
+        See also:
+          GetBkColor, SetColor, GetColor, SetWriteMode, GetMaxColor
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetColor(ColorNum:word); 
+        C, C++: void far setcolor(int color);
+
+        SetColor works just like it normally does with the exception that
+        you can specify any of the 256 possible colors. You can also use 
+        the SetColor function to set the background drawing color. This 
+        is done by setting the current drawing color to the desired 
+        background color to use with the SetColor function, then using 
+        the SetWriteMode function to make it the new background drawing 
+        color. See the SetWriteMode function for more detail. To define 
+        the color that will be selected by the SetColor function, see the 
+        SetRGBPalette function.
+
+        See also:
+          GetColor, SetWriteMode, GetMaxColor, SetRGBPalette, SetBkColor
+
+
+
+
+
+                                       12
+
+
+
+        ---------------------------------------------------------------
+
+        Pascal: procedure SetGraphMode(Mode : integer);
+        C, C++: void far setgraphmode(int mode);
+
+        The SetGraphMode function sets the display mode to the value 
+        provided. The mode number must be in the range of available 
+        modes (less than or equal to the maximum mode available as 
+        determined by the GetMaxMode function. Refer to the mode listing 
+        for the various mode numbers available.
+
+        See also:
+          GetMaxMode, GetGraphMode, GetModeName
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetPalette(ColorNum : word; Color : shortint);
+        C, C++: void far setpalette(int colornum, int color);
+
+        This is an EGA type function. You can only set the first sixteen 
+        palettes using this function in the EGA fashion. It is 
+        recommended that you do not use this function. You should use the 
+        SetRGBpalette function instead. The function is mainly here for 
+        compatibility.
+
+        See also: 
+          GetDefaultPalette, GetPalette, SetAllPalette, SetRGBpalette
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetRGBPalette
+                   (ColorNum, RedValue, GreenValue, BlueValue : integer);
+        C, C++: void far setrgbpalette
+                   (int colornum, int red, int green, int blue);
+
+        This is the correct function to use to set the palette colors in 
+        the BGI driver. It works just as the manual says it does. You can 
+        set any of the 256 palettes using this function. There is no 
+        associated GetRGBPalette function, but you can perform the 
+        function with a small assembler code fragment as show below:
+
+        GetRGBPalette:
+             MOV  AX,1015H
+             MOV  BX,[ColorNumber]
+             INT  10H
+             MOV  [RedValue],DH
+             MOV  [GreenValue],CH
+             MOV  [BlueValue],CL
+
+        See also: 
+          GetDefaultPalette, GetPalette, SetAllPalette, SetPalette
+
+
+
+
+
+
+                                       13
+
+
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetVisualPage(Page : word);
+        C, C++: void far setvisualpage(int page);
+
+        The SetVisualPage does nothing. You only get one display page to 
+        work with. If you want more you are welcome to add it to the BGI 
+        code.
+
+        -----------------------------------------------------------------
+
+        Pascal: procedure SetWriteMode(WriteMode : integer);
+        C, C++: void far setwritemode(int mode);
+
+        The SetWriteMode function has been altered. Normally it only 
+        allows the values of 0 and 1 to be used. It has been modified to 
+        expand the available write modes and to provide a means to also 
+        control the write mode of the pixel, bar, fill, and text 
+        routines. 
+
+        See SetWriteMode Operation description below for a description on 
+        the use of the SetWriteMode command. Also see the FLOOD.DOC file 
+        for a description of the floodfill operation.
+
+        See also:
+          SetColor, GetColor, SetBkColor, GetBkColor, SetRGBPalette
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       14
+
+
+
+                             SetWriteMode Operation
+
+        The top three bits (5, 6 and 7) of the WriteMode value controls 
+        which group of functions the write mode value will affect. 
+
+        Bits 5, 6 and 7 = function select:
+          000 = 0:(00) Line procedures
+          001 = 1:(20) Pixel procedures 
+          010 = 2:(40) Fill procedures
+          011 = 3:(60) Floodfill options
+          100 = 4:(80) Text procedures
+          101 = 5:(A0) <reserved>
+          110 = 6:(C0) <reserved> 
+          111 = 7:(E0) Misc commands 
+
+        If the function select value is 000 ($00), then the Line function 
+        write mode will be updated. All line based functions are 
+        controlled via this setting. 
+
+        If the function select value is 001 ($20), then the Pixel 
+        function write mode will be updated. All pixel based functions 
+        are controlled via this setting. (This includes circle and arc 
+        drawing.)
+
+        If the function select value is 010 ($40), then the bar/fill 
+        write mode function will be updated. All Bar and fill functions 
+        will be affected by this setting (this includes floodfill). 
+
+        If the function select value is 011 ($60), then the floodfill 
+        type options will be updated. Future floodfill operations will 
+        then be perfromed in the manner specified.
+
+        If the function select value is 100 ($80), then text write mode 
+        function will be updated. All bitmapped text functions will be 
+        drawn using the mode specified. 
+
+        Function select values 101 ($A0) and 110 ($C0) are reserved for 
+        future use. 
+
+        Note that $C0 used to control the PutImage background color. In 
+        this release, it is still supported, but at some point in the 
+        future it will no longer be supported (when I need the command 
+        for something else). If you use this option, you should switch to 
+        the Misc Command function to perform the action. 
+
+        If the value is 111 ($E0), then a misc command function is 
+        performed. See the list below for the specific commands that are 
+        currently supported for this selection.
+
+
+
+
+
+
+
+
+
+                                       15
+
+
+
+        Functions $00, $20, $40, and $80 use the following mode commands 
+        to control the operation of the selected function.
+
+        Bits 0-4 = write mode:
+         foreground and       foreground              background 
+         background drawing   drawing only            drawing only
+          0= MOVE write       8= FORE MOVE write      16= BACK MOVE write     
+          1= XOR write        9= FORE XOR write       17= BACK XOR write      
+          2= OR write        10= FORE OR write        18= BACK OR write      
+          3= AND write       11= FORE AND write       19= BACK AND write     
+          4= NOT MOVE write  12= FORE NOT MOVE write  20= BACK NOT MOVE write
+          5= NOT XOR write   13= FORE NOT XOR write   21= BACK NOT XOR write 
+          6= NOT OR write    14= FORE NOT OR write    22= BACK NOT OR write  
+          7= NOT AND write   15= FORE NOT AND write   23= BACK NOT AND write 
+
+        24 = Set Background color to currently selected foreground color.
+        30 = Return the current write mode on next GetMaxMode call.
+        31 = Return selected background color on next GetMaxMode call.
+
+        Bits 0 through 4 control the write mode that will be used. 
+        If the value given is between 0 and 7, then both the foreground 
+        and the background will be drawn using the style selected. 
+
+        If a value between 8 and 15 is used, then only the foreground 
+        will be drawn using the style selected. The background will be 
+        left unaffected. 
+
+        If a value between 16 and 23 is given, then only the background 
+        will be drawn using the style selected. The foreground will be 
+        left unaffected. 
+
+        Value 24 is used to set the background color for the selected 
+        function. The current drawing color that was set with SetColor 
+        will be used as the background color for the selected function.
+
+        Values 25 through 29 are currently reserved for future use and 
+        should not be used. 
+
+        Value 30 modifies the GetMaxMode function so that it will return 
+        the currently selected write mode on the next call.
+
+        Value 31 modifies the GetMaxMode function so that it will return 
+        the currently selected background color on the next call.
+
+        Note that the values between 0 and 23 are all valid for 
+        controlling with the PutImage function as well. Use the desired 
+        value as the WriteMode value in the PutImage function. The 
+        PutImage background color is controlled via the Misc Command 
+        selection (see below).
+
+
+
+
+
+
+
+
+                                       16
+
+
+
+        The FloodFill type option selection ($60) allows you to control 
+        the operation of the floodfill procedure. The following options 
+        are currently supported.
+
+          BorderFill ------- 0  = border fill method (default)
+          SeedFill --------- 1  = seed fill method
+          AutoFill --------- 8  = auto fill mode detection (default)
+          ComplexFill ------ 9  = force complex fill mode
+          FillCompressOff -- 10 = fast fill stack operation (default)
+          FillCompressOn --- 11 = compressed fill stack operation
+          FillDelayOff ----- 12 = draw fill lines during search (default)
+          FillDelayOn ------ 13 = wait until search is done to do fill
+          FillTracerOff ---- 14 = don't show tracer cursor (default)
+          FillTracerOn ----- 15 = show tracer cursor during search
+
+        Sub-functions 2-7 and 16-30 are currently unused and reserved for 
+        future use. You should not use these function numbers.
+
+        Sub-function 31 returns the currently selected floodfill option 
+        flags in the next GetMaxMode function call. 
+
+        The format of the option flags is as follows:
+         bit        description
+          0: 0=borderfill    1=seedfill
+          1: <reserved>
+          2: 0=auto fill     1=force complex fill
+          3: 0=compress off  1=compress on
+          4: 0=delay off     1=delay on
+          5: 0=tracer off    1=tracer on
+          6: <reserved>
+          7: 0=simplex fill  1=complex fill
+
+        For more information of the operation of the floodfill function, 
+        see the FLOOD.DOC file which contains a full description of the 
+        operation of the floodfill function.
+
+        The Misc Command selection ($E0) controls various misc internal 
+        operations of the BGI driver. The following options are 
+        currently supported by this selection.
+
+        24 - Set PutImage background color to the current color that was 
+              selected with the SetColor function.
+        25 - Return the currently active Display mode on the next            
+              GetMaxMode call. 
+        26 - Return the peak stack usage of the last floodfill command                              
+              that was performed on the next GetMaxMode call. 
+        27 - Return the free stack space of the last floodfill command                              
+              that was performed on the next GetMaxMode call. 
+        30 - Return the last used PutImage write mode on the next 
+              getMaxMode call.
+        31 - Return PutImage background color on next GetMaxMode call. 
+
+        Sub-functions 0-23 and 28-29 are currently unused and reserved 
+        for future use. You should not use these function numbers.
+
+
+
+                                       17
+
+
+
+        Note that unlike the BGI drivers supplied by Borland, this BGI 
+        driver allows you to change the palette used for the background 
+        at will. This allows you to set a specific background color for 
+        the object you are drawing without affecting the backgrounds of 
+        all other drawn items on the screen. 
+
+        In effect, this means that all drawing takes place with both a 
+        foreground color and a background color that you can specify. 
+        As an example, to set the Fill background color for all following 
+        fill commands you would do it like this in Pascal:
+
+           SetColor(BackgroundColor);
+           SetWriteMode($40+24);
+           SetColor(ForegroundColor);
+
+        I recommend that you define some constants that contain the 
+        numbers to use with the SetWriteMode function to make it clearer 
+        what is being done.
+
+        const LineMode   = 0;
+              PixelMode  = $20;
+              FillMode   = $40;
+              TextMode   = $80;
+              BackColor  = 24;
+
+        With the above constant structure you can set the background 
+        color for bitmapped text drawing to the current foreground color 
+        with the instruction "SetWriteMode(TextMode+BackColor);"
+
+        To make things easier, a unit called WRMODE.PAS has been included 
+        which predefines the available command numbers for the 
+        SetWriteMode procedure.
+
+        Note: The standard BGI only uses modes 0 and 1. This new 
+        SetWriteMode function does not implement modes 0 and 1 exactly 
+        like the standard BGI. The standard BGI implements them as 
+        foreground drawing only (mode 8). This unfortunately is 
+        inconsistant with the PolyFill and BitImage operations. For 
+        consistancy I have implemented the function to operate the same 
+        as the BitImage and PolyFill operations. Both foreground and 
+        background are written if you select mode 0 or 1. I didn't like 
+        doing it, but I needed the functional code consistancy.
+
+        If you wish to use the same SetWriteMode functionality, you will 
+        need to use modes 8 and 9 instead of 0 and 1. In most cases the 
+        differences won't be a problem, but in some cases it may, and you 
+        should be aware of the difference in operation. The default line 
+        write mode selection is 8 which is what the default Borland BGI 
+        mode uses.
+
+
+
+
+
+
+
+
+                                       18
+
+
+
+        ***************************************************************
+
+        BitMapped Fonts:
+
+        Another feature of the BGI256 driver is the ability to load your 
+        own custom BitMapped text fonts. 
+
+        The driver will by default use the low 128 character font found 
+        at location $F000:$FE6A in the bios and the upper 128 character 
+        font found at the address stored at the interrupt vector at $1F. 
+
+        If you wish to load your own bit-mapped font for use with the 
+        BGI256 driver, you can do so by loading your own 8x8 font and 
+        pointing the interrupt vector at $1F to your own table. 
+
+        See the BITFONT.DOC file for more information on loading your own 
+        bit-mapped font for use with the BGI256 driver.
+
+
+        ***************************************************************
+
+        Special notes:
+
+        In the previous versions of the BGI256 driver, SetWriteMode 
+        function select 110 ($C0), was used to control the PutImage 
+        function background color. While it is still unoffically 
+        supported, it may disappear in a future release of the driver. If 
+        you are using this function, you should change over to the Misc 
+        Command function instead. 
+
+        Note: The PutImage mode selection only worked for defining the 
+        PutImage background color. When you call the PutImage function it 
+        over-rides any write mode setting that was set by the 
+        SetWriteMode function. For this reason, the function was dropped 
+        as a group selection and the single background color selection 
+        moved to the Misc command function.
+
+        In the previous version of the BGI256 driver, the Group function 
+        selection was ignored for subfunction value 25. While this is 
+        still supported in this version of the driver, it will not be 
+        supported in future versions. If you are using this function, you 
+        should change it to be selected with the Misc Command group 
+        selection.
+
+        Also keep in mind that I am using the SetWriteMode function in an 
+        unoffical way. Borland may change it's use at any point in the 
+        future which may disrupt how I am using it. 
+
+
+
+
+
+
+
+
+
+
+                                       19
+
+
+
+        ***************************************************************
+
+        Loading and using the BGI driver:
+
+        You can use the RegisterBGIdriver function to register a BGI 
+        driver that was directly loaded into your program. That way you 
+        can avoid the delay in loading the driver from disk and the 
+        possibility that the file may not be available on disk. 
+
+        You can load a BGI driver into the Code segment, Data segment, or 
+        onto the Heap. It is even possible to access the driver 
+        externally from your program if needed. The only thing you need 
+        is to pass a far pointer containing the starting location of the 
+        driver image in memory to the RegisterBGIdriver function which 
+        tells the program where to find the driver.
+
+        By default, the Borland compilers will load the BGI driver onto 
+        the heap when the InitGraph function is called. If the 
+        RegisterBGIdriver function is called before the InitGraph 
+        function, then the driver will be expected to exist at the 
+        address provided in the pointer.
+
+        If you are loading a non-Borland BGI driver, then you must 
+        additionally call the InstallUserDriver function to let the 
+        program know that it exists.
+
+        The sequence of events should be:
+
+           InstallUserDriver
+           RegisterBGIdriver {if used}
+           InitGraph
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       20
+
+
+
+        *****************************************************************
+
+        The following are some sample procedures for initializing the
+        BGI driver to show you the options that are available.
+
+        {---------------------------------------------------------------}
+        {Sample procedure to include the BGI256 driver in the code 
+        segment and initialize it.}
+
+          CONST Mode200  = 0;  {320x200x256}
+                Mode400  = 1;  {640x400x256}
+                Mode480  = 2;  {640x480x256}
+                Mode600  = 3;  {800x600x256}
+                Mode768  = 4;  {1024x768x256}
+                Mode1024 = 5;  {2048x1024x256}
+
+          procedure BGI256Proc; External;
+          {$L BGI256}
+          procedure InitBGI256;
+          begin
+            GD := InstallUserDriver('BGI256',nil);
+            Error := RegisterBGIdriver(@BGI256Proc);
+            GM := Mode480;              {start in 640x480x256 mode}
+            InitGraph(GD,GM,'');
+            Error := GraphResult;
+            if Error <> 0 then
+            begin
+              writeln(Error,' Error: Could not initialize BGI driver');
+              Exit;
+            end;
+          end;
+
+        {-----------------------------------------------------------}
+        {Sample procedure to load the BGI256 driver from disk
+        onto the heap and initialize it.}
+
+          procedure InitBGI256;
+          begin
+            GD := InstallUserDriver('BGI256',nil);
+            GM := Mode480;              {start in 640x480x256 mode}
+            InitGraph(GD,GM,'');
+            Error := GraphResult;
+            if Error <> 0 then
+            begin
+              writeln(Error,' Error: Could not initialize BGI driver');
+              Exit;
+            end;
+          end;
+
+
+
+
+
+
+
+
+
+                                       21
+
+
+
+        {-----------------------------------------------------------}
+        {Sample procedure to load the BGI256 driver from disk
+        onto the heap, detect whether card exists, and initialize it.}
+
+          CONST AutoMode = 127;
+          function BGI256AutoDetect:integer; FAR;
+          begin
+            BGI256AutoDetect := AutoMode; {return max mode if good}
+          end;
+
+          procedure InitBGI256;
+          begin
+            GD := InstallUserDriver('BGI256',@BGI256AutoDetect);
+            InitGraph(GD,GM,'');  {GM is set by autodetect}
+            Error := GraphResult;
+            if Error <> 0 then
+            begin
+              writeln(Error,' Error: Could not initialize BGI driver');
+              Exit;
+            end;
+          end;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       22
+

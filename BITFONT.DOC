@@ -1,0 +1,188 @@
+                Modifying the BGI256 Bit-Mapped Font
+                     Michael Day - 12/26/92
+
+The BGI256 driver obtains the basic bit-mapped font by reading in 
+the system font. The system font is actually obtained from two 
+locations. The lower 128 characters are read from the BIOS ROM, 
+which is the font the graphics mode uses when the 8x8 font is 
+selected. The lower font table is located at the real address 
+$F000:$FA6E, and is arranged as an array[0..127,0..7] of byte. 
+Each of the eight bytes in a table entry make up a character 
+definition, the first byte representing the first scan line of 
+the character. The system font table is located in ROM, so you 
+can't change it. 
+
+The upper 128 character set is derived by reading the extended 
+system font, which can be found at the location indicated by the 
+vector found at interrupt $1F. If the vector at interrupt $1F is 
+zero, the extended character set is not available. On these 
+systems you can load the character set by running the 
+GRAFTABL.COM program that comes with MS-DOS. GRAFTABL.COM loads 
+the extended character set into memory and points the $1F 
+interrupt at the table.
+
+Normally on MCGA and VGA display systems the character set is 
+automatically loaded. Actually, the character set isn't really
+"loaded" -- the interrupt vector at location $1F simply points at
+the display BIOS ROM where the extended character table is 
+stored. Once again, the interrupt points at a ROM location, which
+means it can't be changed.
+
+Or can it? Remember that you can load the extended character set 
+as a TSR into RAM and point the $1F interrupt to the character 
+set using the GRAFTABL.COM program. Having the character set in 
+RAM means we can change it. When you do, it will displace the 
+ROM based table that the display card provides with the one that 
+GRAFTABL provides.)
+
+The BGI256 driver provides hooks which allow a full character 
+font set to be loaded into memory. It does this by looking at a 
+font ID in character 127 of the upper font table. If it finds the 
+ID there, it knows that the modified table has been loaded into 
+the interrupt vector at $1F, and a full font table can be used.
+
+Note: The BITFNT.ZIP file found in the Compuserve Borland Pascal 
+library contains modified BGI drivers and a full description on 
+how they were modified to support the user loadable bit-mapped 
+fonts. 
+
+-----------------------------------------------------------------
+
+The MAKEFONT program shown below will create the needed full font 
+table. As before, it assumes that you have loaded the extended 
+character font using the GRAFTABL program where needed.
+
+{Program to build a font definition file}
+program MAKEFONT;
+uses  Dos;
+type  FontChar = array [0..7] of byte;
+      FontArray = array [0..127] OF FontChar;
+const FontFilename = 'FNTIMG.DAT';
+      FontID : FontChar = ($4D,$49,$4B,$45,$20,$44,$41,$59);
+var   LoFont : FontArray absolute $F000:$FA6E;
+      UpFont : FontArray;
+      SysFont : ^FontArray;
+      f : file of FontArray;
+begin 
+  assign(f,FontFilename);                   { Create font file }
+  rewrite(f);
+  GetIntVec($1F,pointer(SysFont));    { Get upper font address }
+  UpFont := SysFont^;                 { copy font to local mem }
+  UpFont^[127] := FontID;            { Insert our font ID mark }
+  write(f,LoFont);            { Write system font to the disk, }
+  write(f,UpFont^);               { Followed by the upper font }
+  close(f);                                   { Close the file }
+end. 
+
+Within a program you can load the modified font table with the 
+following procedure:
+
+  {procedure for loading the modified character font}
+  const FontFilename = 'FNTIMG.DAT';
+  type  FontArray = array [0..255, 0..7] of byte;
+  var   ExtFont : FontArray;
+        f : file of FontArray;
+  procedure LoadFont;
+  begin
+    assign(f,FontFilename);  { Read the font table into memory }
+    reset(f);
+    read(f,ExtFont);
+    close(f);
+    SetIntVec($1F,@ExtFont[128]);   { set the interrupt vector }
+  end; 
+
+Alternately, you can load the font as a TSR with the following 
+program:
+
+{TSR program for loading the modified character font to memory}
+{$M 1000,0,0}
+program MGRAFTBL;
+const FontFilename = 'FNTIMG.DAT';
+type  FontArray = array [0..255, 0..7] of byte;
+var   ExtFont : FontArray;
+      f : file of FontArray;
+begin
+  assign(f,FontFilename);   { Read the font table into memory }
+  reset(f);
+  read(f,ExtFont);
+  close(f);
+  SetIntVec($1F,@ExtFont[128]);    { set the interrupt vector }
+  Keep(0);
+end; 
+
+-----------------------------------------------------------------
+
+The BGI256 driver tests if the vector found at $1F is valid (non-
+zero). Next a test is made to see if it is our own modified table 
+or some other table.  It determines whether it is the modified 
+table by looking for a signature (4D,49,4B,45) in the first half 
+of the last font character (#127). If this is a standard system 
+font, the character would have zeros in it. If the font table is 
+not our custom table, the driver uses the system font as normal. 
+This means it uses the lower font found at address $F000:$FA6E, 
+and assumes the font being pointed to by interrupt $1F is the 
+upper (extended) font. 
+
+If the driver finds the custom font signature, it assumes the 
+font table being addressed by $1F is the custom font and that the 
+normal lower system font is to be replaced by the font found in 
+the half of the extended font table located below the interrupt 
+vector. Be sure to restore the old interrupt vector when you are 
+done with it so that other programs will be happy.
+
+A note about loading your own font:
+
+With the older V2.00 BGI drivers, you could reload the font table 
+address at Int $1f anytime you wanted and the BGI driver would 
+automatically reflect the new font on the next usage. 
+
+In the V3.00 drivers, this is no longer true. To deal with 
+protected mode, the BGI driver must pre-load the address at the 
+time the BGI driver is registered. That means that if you change 
+the address found at INT $1f after the driver has been 
+registered, the change will not be reflected in the BGI driver. 
+
+There are two ways in which a BGI driver can be registered, the 
+normal method is to call the BGI InitGraph function which 
+automatically attempts to register the indicated driver. (If no 
+driver is indicated it will attempt to determine the proper 
+driver to use.)
+
+Alternately, you can use the RegisterBGIdriver function to 
+specifically register a driver that you have loaded into memory 
+either via Linking it into the code, or via loading it on the 
+heap (or elsewhere in memory).
+
+The act of registering the driver updates the various registers 
+in the driver. This is true for both protected mode and real mode 
+operation. 
+
+Keep in mind that while the memory address is fixed, the contents 
+of the memory can still be changed. Thus to change the font, you 
+only need to change the contents in the memory where you loaded 
+the font table. The only limitation is that you cannot move the 
+table to a different memory address once the driver has been 
+registered.
+
+Also keep in mind that the BGI driver expects the font to appear 
+in real memory. This means that if you are writing a protected 
+mode application, you must use the GlobalDOSAlloc system call to 
+allocate memory that can be shared by both protected and real 
+mode in which to place the font table if you intend to load it 
+inside your application. If you use a TSR to load the font before 
+you run your application rather than loading it inside your 
+application, you don't need to worry about that.
+
+Additionally, remember that when in protected mode, you are in a 
+virtual environment. That means that the $1f interrupt vector 
+that you set with SetIntVec is not the real mode interrupt 
+vector, but rather a simulated vector that is isolated from the 
+real mode interrupt. To change the real $1f interrupt vector 
+inside your program, you must place a call to the DPMI server to 
+perform that action. 
+
+The program TESTFONT.PAS shows an example of working with the 
+modified BGI in real and protected mode operation.
+
+<eof>
+
